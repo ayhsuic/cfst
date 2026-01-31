@@ -1,28 +1,20 @@
 #!/bin/bash
 
-# 自动将 Zeabur 的端口变量注入 Nginx 配置
-cat > /etc/nginx/http.d/default.conf <<EOF
-server {
-    listen ${PORT:-80}; # 如果变量为空则默认80
-    root /var/www/html;
-    location / {
-        add_header Content-Type text/plain;
-    }
-}
-EOF
+# 1. 准备初始内容
+echo "Scanning WARP IPs on Port ${PORT:-8080}..." > /var/www/html/index.txt
 
-# 启动 Nginx
-nginx
-
-# 初始占位文件
-echo "Checking IPs..." > /var/www/html/index.txt
-
-# 循环优选
+# 2. 后台测速任务
+(
 while true; do
-    ./cfst -f ip.txt -tl 150 -p 0 -o result.csv
+    ./cfst -f ip.txt -tl 150 -dn 10 -p 0 -o result.csv
     if [ -f "result.csv" ]; then
-        # 存入 index.txt 供 GCP 访问
         sed -n '2,11p' result.csv | awk -F, '{print $1}' > /var/www/html/index.txt
     fi
     sleep 1800
 done
+) &
+
+# 3. 启动 Caddy 监听 8080
+# ${PORT:-8080} 的意思是：如果系统给了端口就用系统的，没给就用 8080
+echo "Caddy 起航，目标端口: ${PORT:-8080}"
+caddy file-server --listen :${PORT:-8080} --root /var/www/html
