@@ -1,20 +1,28 @@
 #!/bin/bash
 
-# 后台测速逻辑不变
-(
+# 自动将 Zeabur 的端口变量注入 Nginx 配置
+cat > /etc/nginx/http.d/default.conf <<EOF
+server {
+    listen ${PORT:-80}; # 如果变量为空则默认80
+    root /var/www/html;
+    location / {
+        add_header Content-Type text/plain;
+    }
+}
+EOF
+
+# 启动 Nginx
+nginx
+
+# 初始占位文件
+echo "Checking IPs..." > /var/www/html/index.txt
+
+# 循环优选
 while true; do
-    echo "开始优选测速..."
-    ./cfst -f ip.txt -tl 150 -dn 10 -p 0 -o result.csv
-    
+    ./cfst -f ip.txt -tl 150 -p 0 -o result.csv
     if [ -f "result.csv" ]; then
-        sed -n '2p' result.csv | awk -F, '{print $1}' > index.txt
-        echo "优选完成，当前最优 IP: $(cat index.txt)"
+        # 存入 index.txt 供 GCP 访问
+        sed -n '2,11p' result.csv | awk -F, '{print $1}' > /var/www/html/index.txt
     fi
     sleep 1800
 done
-) &
-
-# 换成 Python3 启动 Web 服务
-# 它会自动监听 Zeabur 分配的 $PORT
-echo "启动 Web 服务在端口 $PORT..."
-python3 -m http.server $PORT
